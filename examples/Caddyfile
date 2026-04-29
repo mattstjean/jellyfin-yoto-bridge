@@ -1,0 +1,24 @@
+# Caddyfile — replace this whole file with the same contents,
+# but change the domain on the first line to YOUR DuckDNS domain.
+#
+# Caddy will automatically:
+#   - Get a free HTTPS certificate from Let's Encrypt
+#   - Renew it before it expires
+#   - Redirect any plain http:// traffic to https://
+
+your-name.duckdns.org {
+    # Forward all incoming traffic to Jellyfin running on this same machine.
+    # 127.0.0.1 means "this computer" — Caddy and Jellyfin talk locally.
+    # 8096 is Jellyfin's default port.
+    reverse_proxy 127.0.0.1:8096
+
+    # Compress responses for faster streaming.
+    encode gzip
+
+    # Recommended security headers.
+    header {
+        Strict-Transport-Security "max-age=31536000;"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+    }
+}
