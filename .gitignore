@@ -2,6 +2,9 @@
 *.json
 !*.example.json
 
+# Claude
+.claude/
+
 # OS junk
 .DS_Store
 Thumbs.db
