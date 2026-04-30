@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<!--
+  duckdns-task.xml — Windows Task Scheduler definition for duckdns-update.py.
+
+  SETUP:
+  1. Replace the placeholder path below:
+       __SCRIPT_PATH__   →  full path to duckdns-update.py
+                            e.g. C:\Users\Matt\jellyfin-yoto-bridge\scripts\duckdns-update.py
+
+  2. Open Task Scheduler (Start → search "Task Scheduler").
+
+  3. Action menu → Import Task… → select this file.
+
+  4. In the Import dialog, review the settings (the trigger fires every 5 min
+     forever once the task is enabled), then click OK.
+
+  5. The task will run silently every 5 minutes. To check it's working,
+     find "DuckDNS Updater" in the Task Scheduler Library and look at
+     "Last Run Result" — should be (0x0) on success.
+
+  TO DISABLE:
+       Right-click the task in Task Scheduler → Disable.
+
+  NOTE: This assumes "py" (the Python launcher) is on your PATH, which is the
+  default if you installed Python from python.org and ticked "Add to PATH".
+  If not, replace <Command>py</Command> with the full path to python.exe.
+-->
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Updates DuckDNS subdomain with the current public IP.</Description>
+    <URI>\DuckDNS Updater</URI>
+  </RegistrationInfo>
+
+  <Triggers>
+    <TimeTrigger>
+      <Repetition>
+        <Interval>PT5M</Interval>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+      <StartBoundary>2026-01-01T00:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+    </TimeTrigger>
+  </Triggers>
+
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>true</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT5M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+
+  <Actions Context="Author">
+    <Exec>
+      <Command>py</Command>
+      <Arguments>"__SCRIPT_PATH__"</Arguments>
+    </Exec>
+  </Actions>
+</Task>
