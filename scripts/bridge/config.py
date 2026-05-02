@@ -9,6 +9,7 @@ Migrates from the legacy ~/.yoto-create-playlist.json if present.
 """
 
 from . import http
+import logging
 import os
 import sys
 import json
@@ -16,6 +17,8 @@ from pathlib import Path
 from typing import Dict, Any
 
 from .pretty_output import info, ok, fail
+
+log = logging.getLogger(__name__)
 
 LEGACY_CONFIG = Path.home() / ".yoto-create-playlist.json"
 
@@ -40,12 +43,14 @@ def load() -> Dict[str, Any]:
     """Load config, migrating from legacy location if needed."""
     path = config_path()
     if path.exists():
+        log.debug("loading config: %s", path)
         try:
             return json.loads(path.read_text())
         except json.JSONDecodeError:
             fail(f"Invalid JSON in config file: {path}. Please fix or delete this file to continue.")
 
     if LEGACY_CONFIG.exists():
+        log.debug("migrating legacy config: %s → %s", LEGACY_CONFIG, path)
         info(f"Migrating config from {LEGACY_CONFIG} to {path}")
         cfg = json.loads(LEGACY_CONFIG.read_text())
         save(cfg)
@@ -55,11 +60,13 @@ def load() -> Dict[str, Any]:
             pass
         return cfg
 
+    log.debug("no config found at %s", path)
     return {}
 
 
 def save(cfg: Dict[str, Any]) -> None:
     path = config_path()
+    log.debug("saving config: %s", path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(cfg, indent=2))
     try:

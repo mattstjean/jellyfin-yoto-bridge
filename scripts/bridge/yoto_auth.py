@@ -4,11 +4,14 @@ Manages the access/refresh token lifecycle. The TokenStore protocol is just
 "something that has cfg and saves it" — typically the config module.
 """
 
+import logging
 import time
 from typing import Dict, Any, Callable
 
 from . import http
 from .pretty_output import info, ok, warn, fail
+
+log = logging.getLogger(__name__)
 
 YOTO_AUTH = "https://login.yotoplay.com"
 YOTO_API = "https://api.yotoplay.com"
@@ -32,14 +35,19 @@ class YotoAuth:
     def access_token(self) -> str:
         """Return a valid access token, refreshing or re-authorizing as needed."""
         if "yoto_access_token" not in self.cfg:
+            log.debug("no token stored — starting device login")
             self._device_login()
         elif time.time() > self.cfg.get("yoto_token_expires", 0):
+            log.debug("token expired — refreshing")
             self._refresh()
+        else:
+            log.debug("token valid (expires in %.0fs)", self.cfg["yoto_token_expires"] - time.time())
         return self.cfg["yoto_access_token"]
 
     # ---------- Internal ----------
 
     def _device_login(self) -> None:
+        log.debug("device login: client_id=%s", self.cfg.get("yoto_client_id"))
         info("Authorizing with Yoto\u2026")
         s, r = http.request("POST", f"{YOTO_AUTH}/oauth/device/code", form={
             "client_id": self.cfg["yoto_client_id"],
@@ -88,6 +96,7 @@ class YotoAuth:
         time.sleep(interval)
 
     def _refresh(self) -> None:
+        log.debug("refreshing token")
         s, r = http.request("POST", f"{YOTO_AUTH}/oauth/token", form={
             "grant_type": "refresh_token",
             "client_id": self.cfg["yoto_client_id"],
@@ -104,7 +113,7 @@ class YotoAuth:
         self.cfg["yoto_refresh_token"] = r.get(
             "refresh_token", self.cfg.get("yoto_refresh_token")
         )
-        self.cfg["yoto_token_expires"] = (
-            int(time.time()) + r.get("expires_in", 86400) - 60
-        )
+        expires_in = r.get("expires_in", 86400)
+        self.cfg["yoto_token_expires"] = int(time.time()) + expires_in - 60
+        log.debug("token stored: expires_in=%ds", expires_in)
         self.save_cfg(self.cfg)

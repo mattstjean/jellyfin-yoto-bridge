@@ -26,6 +26,7 @@ a chapterless audiobook is a different problem (you'd need to split by time,
 which is rarely what you want).
 """
 
+import logging
 import os
 import sys
 import json
@@ -34,6 +35,10 @@ import argparse
 import subprocess
 from pathlib import Path
 from typing import List, Dict, Any
+
+from scripts.logging_setup import configure as _configure_logging
+
+log = logging.getLogger(__name__)
 
 
 # ---------- Pretty output ----------
@@ -67,6 +72,7 @@ def check_tools() -> None:
 
 def get_chapters(audio_path: Path) -> List[Dict[str, Any]]:
     """Use ffprobe to read chapter markers from the file."""
+    log.debug("ffprobe: %s", audio_path)
     result = subprocess.run(
         [
             "ffprobe", "-v", "error",
@@ -79,7 +85,9 @@ def get_chapters(audio_path: Path) -> List[Dict[str, Any]]:
     if result.returncode != 0:
         fail(f"ffprobe failed: {result.stderr.strip()}")
     data = json.loads(result.stdout or "{}")
-    return data.get("chapters", [])
+    chapters = data.get("chapters", [])
+    log.debug("found %d chapter markers", len(chapters))
+    return chapters
 
 
 # ---------- Filename safety ----------
@@ -123,6 +131,7 @@ def split_chapters(
             duration = float(end) - float(start)
             mins = int(duration // 60)
             secs = int(duration % 60)
+            log.debug("  [%s] %r  start=%s end=%s", filename, title, start, end)
             info(f"  [{i:>{width}}] {filename}  ({mins}:{secs:02d})")
             continue
 
@@ -143,9 +152,11 @@ def split_chapters(
             "-metadata", f"track={i}/{len(chapters)}",
             str(out_path),
         ]
+        log.debug("ffmpeg: %s", " ".join(cmd))
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             fail(f"ffmpeg failed on chapter {i}:\n{result.stderr.strip()}")
+        log.debug("  → wrote %s", out_path)
 
 
 # ---------- Main ----------
@@ -175,8 +186,16 @@ Examples:
                         help="MP3 bitrate, e.g. 96k, 128k, 192k (default: 128k)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show what would be split without writing files")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Show debug logging")
     args = parser.parse_args()
+    _configure_logging(verbose=args.verbose)
+    # Check for help flag manually since we want to show it even if the required tools are missing.
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
 
+    # Check for ffmpeg/ffprobe before doing any work, so we fail fast if they're missing.
     check_tools()
 
     audio_path = Path(args.input).expanduser().resolve()

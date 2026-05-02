@@ -15,6 +15,7 @@ Usage:
   duckdns_update.py --status          Show current config (token redacted)
 """
 
+import logging
 import os
 import sys
 import json
@@ -22,6 +23,10 @@ import argparse
 import urllib.request
 import urllib.error
 from pathlib import Path
+
+from scripts.logging_setup import configure as _configure_logging
+
+log = logging.getLogger(__name__)
 
 
 # ---------- Config ----------
@@ -88,17 +93,21 @@ def update(cfg: dict) -> bool:
         f"&token={cfg['token']}"
         f"&ip="  # blank = let DuckDNS auto-detect
     )
+    log.debug("updating: %s.duckdns.org", cfg["domain"])
     try:
         with urllib.request.urlopen(url, timeout=30) as r:
             body = r.read().decode().strip()
     except urllib.error.URLError as e:
+        log.debug("network error: %s", e.reason)
         print(f"Network error: {e.reason}", file=sys.stderr)
         return False
     except TimeoutError:
+        log.debug("request timed out")
         print("Request timed out", file=sys.stderr)
         return False
 
     # DuckDNS responds with literally "OK" or "KO"
+    log.debug("response: %r", body)
     if body == "OK":
         return True
     print(f"DuckDNS rejected the update (response: {body!r})", file=sys.stderr)
@@ -126,7 +135,10 @@ def main() -> None:
                         help="Re-run first-run setup (overwrites existing config)")
     parser.add_argument("--status", action="store_true",
                         help="Show current config (token redacted)")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Show debug logging")
     args = parser.parse_args()
+    _configure_logging(verbose=args.verbose)
 
     if args.setup:
         first_run_setup()

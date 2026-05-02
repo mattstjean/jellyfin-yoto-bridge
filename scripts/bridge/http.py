@@ -5,12 +5,20 @@ where body is a dict (parsed JSON or {"error": str}).
 """
 
 import json
+import logging
+import re
 import urllib.request
 import urllib.parse
 import urllib.error
 from typing import Optional, Tuple, Dict, Any
 
-from scripts.bridge.pretty_output import info
+log = logging.getLogger(__name__)
+
+_API_KEY_RE = re.compile(r"(api_key=)[^&]+")
+
+
+def _redact(url: str) -> str:
+    return _API_KEY_RE.sub(r"\1<hidden>", url)
 
 
 def request(
@@ -32,6 +40,10 @@ def request(
         data = urllib.parse.urlencode(form).encode()
         headers["Content-Type"] = "application/x-www-form-urlencoded"
 
+    log.debug("%s %s", method, _redact(url))
+    if json_body is not None:
+        log.debug("  body: %s", json.dumps(json_body)[:200])
+
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
 
     try:
@@ -39,16 +51,22 @@ def request(
             body = r.read().decode()
             # Might be JSON, but might be empty (if testing connectivity, or might be an empty error page, or might be an html page if testing connectivity to a non-API endpoint), so try to parse but fall back to raw text.
             try:
-                return r.status, json.loads(body) if body else {}
+                parsed = json.loads(body) if body else {}
+                log.debug("  → %d  (%d bytes)", r.status, len(body))
+                return r.status, parsed
             except Exception:
+                log.debug("  → %d  (non-JSON body)", r.status)
                 return r.status, {"error": body[:500]}  # Don't include more than 500 chars of an HTML error page
     except urllib.error.HTTPError as e:
         body = e.read().decode()
+        log.debug("  → HTTP %d", e.code)
         try:
             return e.code, json.loads(body) if body else {}
         except Exception:
             return e.code, {"error": body[:500]}
     except urllib.error.URLError as e:
+        log.debug("  → network error: %s", e.reason)
         return 0, {"error": f"Network error: {e.reason}"}
     except TimeoutError:
+        log.debug("  → timeout")
         return 0, {"error": "Request timed out"}

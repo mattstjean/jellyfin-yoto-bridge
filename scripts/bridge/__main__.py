@@ -1,4 +1,4 @@
-"""Entry point for `python -m yoto_bridge`."""
+"""Entry point for `python -m bridge`."""
 
 from .cli import main
 

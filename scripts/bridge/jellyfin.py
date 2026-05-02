@@ -4,17 +4,21 @@ Wraps the bits of the Jellyfin API we actually use: searching for audiobooks,
 fetching their tracks, and constructing playable stream URLs.
 """
 
+import logging
 import urllib.parse
 from typing import Dict, Any, List
 
 from . import http
 from .pretty_output import info, fail
 
+log = logging.getLogger(__name__)
+
 
 class Jellyfin:
     def __init__(self, url: str, api_key: str):
         self.url = url.rstrip("/")
         self.api_key = api_key
+        log.debug("client ready: %s", self.url)
 
     # ---------- Internal ----------
 
@@ -40,6 +44,7 @@ class Jellyfin:
         and ranks folders ahead of single files in the disambiguation prompt
         because a folder of chapters is almost always what a user wants for Yoto.
         """
+        log.debug("searching: %r", search)
         body = self._get(
             "/Items",
             searchTerm=search,
@@ -48,12 +53,14 @@ class Jellyfin:
             Limit=20,
         )
         items = body.get("Items", [])
+        log.debug("raw results: %d", len(items))
 
         # Drop noise: only keep folders or audio items.
         items = [
             i for i in items
             if i.get("IsFolder") or i.get("MediaType") == "Audio"
         ]
+        log.debug("after filter: %d", len(items))
 
         if not items:
             fail(
@@ -64,9 +71,12 @@ class Jellyfin:
 
         # Sort: folders first (likely the chapter collection), then by name.
         items.sort(key=lambda i: (not i.get("IsFolder", False), i.get("Name", "")))
+        log.debug("sorted: %s", [i.get("Name") for i in items])
 
         if len(items) == 1:
-            return items[0]
+            chosen = items[0]
+            log.debug("single match: %r (id=%s)", chosen.get("Name"), chosen.get("Id"))
+            return chosen
 
         info(f"Found {len(items)} matches:")
         for i, m in enumerate(items, 1):
@@ -77,8 +87,11 @@ class Jellyfin:
             artist_str = ", ".join(artists) if artists else "unknown"
             info(f"  [{i}] {m['Name']} ({kind}) — {artist_str}")
         pick = input("Which one? ").strip()
+        log.debug("user picked: %r", pick)
         try:
-            return items[int(pick) - 1]
+            chosen = items[int(pick) - 1]
+            log.debug("resolved: %r (id=%s)", chosen.get("Name"), chosen.get("Id"))
+            return chosen
         except (ValueError, IndexError):
             fail("Invalid selection.")
             return {}
@@ -90,8 +103,14 @@ class Jellyfin:
         If the item is a folder/album, returns its child audio tracks in order.
         If the item is a single audio file (e.g. one big M4B), returns just it.
         """
+        log.debug(
+            "get_tracks: %r  is_folder=%s  media_type=%s",
+            item.get("Name"), item.get("IsFolder"), item.get("MediaType"),
+        )
+
         # Single-file audiobook: no children to fetch, the item itself is the track.
         if not item.get("IsFolder", False) and item.get("MediaType") == "Audio":
+            log.debug("single-file — fetching full item")
             return [self._get_full_item(item["Id"])]
 
         body = self._get(
@@ -100,22 +119,32 @@ class Jellyfin:
             SortBy="IndexNumber,SortName",
             Fields="IndexNumber,RunTimeTicks",
         )
-        return [t for t in body.get("Items", []) if t.get("MediaType") == "Audio"]
+        tracks = [t for t in body.get("Items", []) if t.get("MediaType") == "Audio"]
+        log.debug("found %d audio tracks", len(tracks))
+        for t in tracks:
+            ticks = t.get("RunTimeTicks") or 0
+            log.debug("  [%s] %r  %.1fs", t.get("IndexNumber"), t.get("Name"), ticks / 10_000_000)
+        return tracks
 
     def _get_full_item(self, item_id: str) -> Dict[str, Any]:
         """Fetch a single item with the fields we need for payload building."""
+        log.debug("fetching full item: id=%s", item_id)
         body = self._get(
             "/Items",
             ids=item_id,
             Fields="IndexNumber,RunTimeTicks",
         )
         items = body.get("Items", [])
-        return items[0] if items else {}
+        result = items[0] if items else {}
+        log.debug("  → %r  ticks=%s", result.get("Name"), result.get("RunTimeTicks"))
+        return result
 
     def stream_url(self, item_id: str) -> str:
         """Build an MP3 streaming URL for Yoto to call."""
-        return (
+        url = (
             f"{self.url}/Audio/{item_id}/stream.mp3"
             f"?api_key={self.api_key}"
             f"&audioCodec=mp3&audioBitRate=128000"
         )
+        log.debug("stream_url: id=%s", item_id)
+        return url

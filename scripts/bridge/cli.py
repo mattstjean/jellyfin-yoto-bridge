@@ -8,6 +8,7 @@ import sys
 import json
 import argparse
 
+from scripts import logging_setup
 from . import config
 from .pretty_output import info, ok, fail
 from .jellyfin import Jellyfin
@@ -99,8 +100,11 @@ Examples:
                         help="Update the given card instead of creating new")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show what would be sent without posting")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Show debug logging (API calls, responses, etc.)")
 
     args = parser.parse_args(argv)
+    logging_setup.configure(verbose=args.verbose)
     args.search = " ".join(args.search) if args.search else ""
 
     try:

@@ -4,9 +4,12 @@ Each Jellyfin track becomes its own Yoto chapter (one-track-per-chapter), so
 Yoto's resume behavior tracks the user's position at chapter granularity.
 """
 
+import logging
 from typing import Dict, Any, List, Optional, Callable
 
 from .icons import pick_icon
+
+log = logging.getLogger(__name__)
 
 
 def _icon_ref(media_id: Optional[str]) -> Optional[str]:
@@ -26,7 +29,9 @@ def build_payload(
     `stream_url_for(item_id)` is a callable that builds a streaming URL — passed
     in so this module doesn't need to know about Jellyfin specifics.
     """
+    log.debug("build_payload: %r  tracks=%d  icons=%d", book.get("Name"), len(tracks), len(icons))
     book_icon = pick_icon(icons, [book.get("Name", "")])
+    log.debug("book icon: %s", book_icon)
 
     chapters = []
     for i, t in enumerate(tracks, 1):
@@ -34,6 +39,7 @@ def build_payload(
         duration = (t.get("RunTimeTicks") or 0) // 10_000_000  # ticks → seconds
         ch_icon = pick_icon(icons, [title]) or book_icon
         icon_ref = _icon_ref(ch_icon)
+        log.debug("  [%02d] %r  duration=%ds  icon=%s", i, title, duration, ch_icon)
 
         track_obj: Dict[str, Any] = {
             "key": "01",
